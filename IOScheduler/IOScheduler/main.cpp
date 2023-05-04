@@ -14,22 +14,33 @@
 #include <istream>
 #include <sstream>
 #include <vector>
+#include <list>
+#include <map>
+#include <cstdlib>
+#include <iomanip>
+#include <math.h>
+#include <algorithm>
+#include <unistd.h>
 #include <queue>
 
 
 using namespace std;
 
 ifstream file;
+
+enum sums {TURNAROUND=0, WAITING=1, MAXWAITING=2};
+unsigned long movementTracker = 0;
+
 class IORequest{
-public:
     int id;
     int issued;
     int startTime;
     int endTime;
     int track;
     int movesLeft;
+public:
     
-    void setValues(int id1, int issued1, int tr){
+    IORequest(int id1, int issued1, int tr){
         id=id1;
         issued=issued1;
         track=tr;
@@ -38,16 +49,21 @@ public:
     int getId(){ return id; }
     int getIssueTime(){ return issued; }
     int getTrackNumber(){ return track; }
+    int getStartTime() { return startTime; }
+    int getEndTime(){ return endTime; }
+    
+    void setStartTime(int s){ startTime = s; }
+    void setEndTime(int e){ endTime=e; }
 
 };
 
-IORequest* CURRENT_RUNNING_IO;
-int currentTrack=-1;
-int direction=+1;
+IORequest* CURRENT_RUNNING_IO=nullptr;
+int currentTrack=0;
+int direction=1;
 
-vector<IORequest> createdRequests;
-deque<IORequest> insertQ;
-deque<IORequest> IOQueue;
+vector<IORequest*> createdRequests;
+list<IORequest> insertQ;
+
 
 void initialize(string fileName){
     file.open(fileName);
@@ -65,12 +81,12 @@ void initialize(string fileName){
         int issued1,trackNum;
         str >> issued1 >> trackNum;
         
-        IORequest ioReq;
-        ioReq.id=createdRequests.size();
-        ioReq.issued=issued1;
-        ioReq.track=trackNum;
+        IORequest *ioReq= new IORequest(createdRequests.size(), issued1, trackNum);
+//        ioReq->id=createdRequests.size();
+//        ioReq->issued=issued1;
+//        ioReq->track=trackNum;
         createdRequests.push_back(ioReq);
-        insertQ.push_back(ioReq);
+        
     }
         
 }
@@ -79,85 +95,141 @@ void printStats(){}
 
 class IOScheduler{
     public:
-    virtual void getStrategyVictim() = 0;
+    list<IORequest*> IOQueue;
+    virtual IORequest* getStrategyVictim() = 0;
+    virtual void addRequest(IORequest*) = 0;
+    virtual bool empty(){
+        return IOQueue.empty();
+    }
 };
 IOScheduler *sch;
 
 
 class FIFO:public IOScheduler{
 public:
-    void getStrategyVictim(){
+    void addRequest(IORequest* req){
+        IOQueue.push_back(req);
+    }
+    
+    IORequest* getStrategyVictim(){
         
-        CURRENT_RUNNING_IO=&IOQueue.front();
-        if(currentTrack!=-1){
-            if(CURRENT_RUNNING_IO->track > currentTrack) direction=1;
-            else direction=-1;
-        }
-        
+        IORequest* Req=IOQueue.front();
         IOQueue.pop_front();
-        
+        return Req;
     }
 };
 
+
+class SSTF:public IOScheduler{
+public:
+    void addRequest(IORequest* req){
+        IOQueue.push_back(req);
+    }
+
+
+    IORequest* getStrategyVictim(){
+        auto start=IOQueue.begin();
+        for(auto i = IOQueue.begin();i!=IOQueue.end(); i++)
+        {
+            unsigned long curr_dist =
+                (*i)->getTrackNumber() > ::currentTrack ?
+                (*i)->getTrackNumber() - ::currentTrack :
+                ::currentTrack - (*i)->getTrackNumber();
+            unsigned long shortest_dist =
+                (*start)->getTrackNumber() > ::currentTrack ?
+                (*start)->getTrackNumber() - ::currentTrack :
+                ::currentTrack - (*start)->getTrackNumber();
+            if(curr_dist<shortest_dist) start=i;
+            
+        }
+        
+        IORequest* ioReq = *start;
+        IOQueue.erase(start);
+        return ioReq;
+    }
+    
+    bool empty(){
+        return IOQueue.empty();
+    }
+};
+std::map<int, std::string> mapper;
+double summary[3];
+
+void mappingOutput(IORequest* proc){
+    int id=proc->getId();
+    int issueTime=CURRENT_RUNNING_IO->getIssueTime();
+    int startTime =CURRENT_RUNNING_IO->getStartTime();
+    int endTime =CURRENT_RUNNING_IO->getEndTime();
+    
+    string str = to_string(CURRENT_RUNNING_IO->getId())+":\t"+to_string(CURRENT_RUNNING_IO->getIssueTime())+"\t"+to_string(CURRENT_RUNNING_IO->getStartTime())+"\t"+to_string(CURRENT_RUNNING_IO->getEndTime());
+    
+    mapper[id]=str;
+    
+    summary[TURNAROUND]+= endTime - issueTime;
+    summary[WAITING]+= startTime - issueTime;
+    if(summary[MAXWAITING] < startTime-issueTime)
+        summary[MAXWAITING] = startTime-issueTime;
+}
+
+int currentTime = 0;
+
+void printOutputs(){
+    for(int i=0;i<createdRequests.size();i++){
+        cout<<mapper[i]<<endl;
+    }
+    
+    double avgTurnaround=summary[TURNAROUND]/createdRequests.size();
+    double avgWaiting=summary[WAITING]/createdRequests.size();
+    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<
+    fixed << setprecision(2) << avgTurnaround << " "
+    << fixed << setprecision(2) << avgWaiting << " "
+    << (long)(summary[MAXWAITING]) << endl;
+}
 void simulation(){
-    int time = 0;
-    /*while (true)
-    if a new I/O arrived at the system at this current time
-     → add request to IO-queue
-    if an IO is active and completed at this time
-     → Compute relevant info and store in IO request for final summary
-    if no IO request active now
-     if requests are pending
-     → Fetch the next request from IO-queue and start the new IO.
-     else if all IO from input file processed
-     → exit simulation
-    if an IO is active
-     → Move the head by one unit in the direction its going (to simulate seek)
-    Increment time by 1*/
     
-    
-    
+    auto next=createdRequests.begin();
     while(true){
         
-        if(insertQ.front().getIssueTime()==time){
-            IOQueue.push_back(insertQ.front());
-            insertQ.pop_front();
+        if(next!=createdRequests.end() && (*next)->getIssueTime()==::currentTime){
+            sch->addRequest(*next);
+            next++;
         }
-        
-        if(CURRENT_RUNNING_IO!=NULL && CURRENT_RUNNING_IO->endTime==time){
-            cout<<CURRENT_RUNNING_IO->getId()<<":\t"<<CURRENT_RUNNING_IO->getIssueTime()<<"\t"<<CURRENT_RUNNING_IO->startTime<<"\t"<<CURRENT_RUNNING_IO->endTime<<endl;
-            currentTrack=CURRENT_RUNNING_IO->track;
-            CURRENT_RUNNING_IO=NULL;
+        if(::CURRENT_RUNNING_IO!=nullptr){
+            if(::CURRENT_RUNNING_IO->getTrackNumber()==::currentTrack){
+                CURRENT_RUNNING_IO->setEndTime(currentTime);
+            mappingOutput(CURRENT_RUNNING_IO);
+            ::CURRENT_RUNNING_IO=nullptr;
+            continue; }
+        else{
+            currentTrack+=direction;
+            movementTracker++;
         }
-        if(CURRENT_RUNNING_IO==NULL){
-            if(!IOQueue.empty()){
-                sch->getStrategyVictim();
-                CURRENT_RUNNING_IO->startTime=time;
-                if(currentTrack==-1){CURRENT_RUNNING_IO->endTime=time+CURRENT_RUNNING_IO->track;} // first req
-                else if(direction==1){
-                    CURRENT_RUNNING_IO->endTime=CURRENT_RUNNING_IO->track-currentTrack+time;
+        }
+        else if(!::sch->empty()){
+                ::CURRENT_RUNNING_IO = sch->getStrategyVictim();
+            ::CURRENT_RUNNING_IO->setStartTime(currentTime);
+                if (currentTrack!= CURRENT_RUNNING_IO->getTrackNumber()) {
+                    if(currentTrack<CURRENT_RUNNING_IO->getTrackNumber()) direction=1;
+                    else direction=-1;
                 }
-                else {
-                    CURRENT_RUNNING_IO->endTime=currentTrack-CURRENT_RUNNING_IO->track+time;
-                }
-                
-//                cout<<endl<<CURRENT_RUNNING_IO->getId()<<" "<<CURRENT_RUNNING_IO->startTime<<" "<<CURRENT_RUNNING_IO->endTime<<endl;
+            continue;
             }
-            else if(insertQ.empty()){
-                printStats();
+        
+        if(!::CURRENT_RUNNING_IO && ::sch->empty() && next==createdRequests.end()){
                 break;
             }
-        }
-        time++;
-        
+        currentTime++;
     }
+    
 }
 int main(int argc, const char * argv[]) {
     // insert code here...
     std::cout << "Hello, World!\n";
     string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input9";
+    sch=new SSTF();
+
     initialize(inputFile);
-    sch=new FIFO();
     simulation();
+    printOutputs();
     return 0;
 }
