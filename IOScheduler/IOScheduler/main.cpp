@@ -180,9 +180,10 @@ void printOutputs(){
     
     double avgTurnaround=summary[TURNAROUND]/createdRequests.size();
     double avgWaiting=summary[WAITING]/createdRequests.size();
-    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<
+    double avgBusy=(double)(movementTracker)/(double)(currentTime);
+    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<setprecision(4)<<avgBusy<<" "<<
     fixed << setprecision(2) << avgTurnaround << " "
-    << fixed << setprecision(2) << avgWaiting << " "
+    << fixed << setprecision(2) << avgWaiting <<" "
     << (long)(summary[MAXWAITING]) << endl;
 }
 void simulation(){
