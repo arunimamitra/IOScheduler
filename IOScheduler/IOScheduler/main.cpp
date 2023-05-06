@@ -188,6 +188,84 @@ public:
 };
 
 
+class CLOOK : public IOScheduler {
+public:
+    void addRequest(IORequest* req){
+        IOQueue.push_back(req);
+    }
+    
+    IORequest* getStrategyVictim() {
+        list<IORequest*> list;
+        auto next = IOQueue.end(), lo = IOQueue.begin();
+        for (auto it = IOQueue.begin(); it != IOQueue.end(); it++) {
+            if ((*it)->getTrackNumber() >= currentTrack) {
+                if (next == IOQueue.end() ||
+                    (*it)->getTrackNumber() < (*next)->getTrackNumber()) {
+                    next = it;
+                }
+                list.push_back(*it);
+            }
+            if ((*it)->getTrackNumber() < (*lo)->getTrackNumber()) {
+                lo = it;
+            }
+        }
+        bool change = next == IOQueue.end();
+        if (change) next = lo;
+        IORequest* r = *next;
+        IOQueue.erase(next);
+        return r;
+    }
+};
+
+
+class FLOOK : public IOScheduler {
+private:
+    list<IORequest*> addq;
+    bool swap = false;
+public:
+    
+    void addRequest(IORequest* r) {
+        (CURRENT_RUNNING_IO ? addq : IOQueue).push_back(r);
+    }
+    
+    IORequest* getStrategyVictim() {
+        if (IOQueue.empty()) {
+            IOQueue.swap(addq);
+            swap = !swap;
+        }
+        
+        list<IORequest*> hilist, lolist;
+        auto hi = IOQueue.end(), lo = IOQueue.end();
+        for (auto it = IOQueue.begin(); it != IOQueue.end(); it++) {
+            if ((*it)->getTrackNumber() >= currentTrack) {
+                if (hi == IOQueue.end() ||
+                    (*it)->getTrackNumber() < (*hi)->getTrackNumber()) {
+                    hi = it;
+                }
+                hilist.push_back((*it));
+            }
+            if ((*it)->getTrackNumber() <= ::currentTrack) {
+                if (lo == IOQueue.end() ||
+                    (*it)->getTrackNumber() > (*lo)->getTrackNumber()) {
+                    lo = it;
+                }
+                lolist.push_back((*it));
+            }
+        }
+        auto& next = direction==1? hi : lo;
+        bool change = next == IOQueue.end();
+        if (change) next = direction==1 ? lo : hi;
+        IORequest* r2= *next;
+        IOQueue.erase(next);
+        
+        return r2;
+    }
+    
+    bool empty() {
+        return addq.empty() && IOQueue.empty();
+    }
+};
+
 std::map<int, std::string> mapper;
 double summary[3];
 
@@ -216,7 +294,8 @@ void printOutputs(){
     
     double avgTurnaround=summary[TURNAROUND]/createdRequests.size();
     double avgWaiting=summary[WAITING]/createdRequests.size();
-    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<
+    double avgBusy=(double)(movementTracker)/(double)(currentTime);
+    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<setprecision(4)<<avgBusy<<" "<<
     fixed << setprecision(2) << avgTurnaround << " "
     << fixed << setprecision(2) << avgWaiting << " "
     << (long)(summary[MAXWAITING]) << endl;
@@ -257,7 +336,7 @@ void simulation(){
 int main(int argc, const char * argv[]) {
     // insert code here...
     string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input9";
-    sch=new LOOK();
+    sch=new CLOOK();
 
     initialize(inputFile);
     simulation();
