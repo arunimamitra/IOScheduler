@@ -336,7 +336,7 @@ void simulation(){
 int main(int argc, const char * argv[]) {
     // insert code here...
     string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input9";
-    sch=new CLOOK();
+    sch=new FLOOK();
 
     initialize(inputFile);
     simulation();
