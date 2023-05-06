@@ -86,6 +86,7 @@ void initialize(string fileName){
 //        ioReq->issued=issued1;
 //        ioReq->track=trackNum;
         createdRequests.push_back(ioReq);
+        insertQ.push_back(*ioReq);
         
     }
         
@@ -112,7 +113,6 @@ public:
     }
     
     IORequest* getStrategyVictim(){
-        
         IORequest* Req=IOQueue.front();
         IOQueue.pop_front();
         return Req;
@@ -140,7 +140,6 @@ public:
                 (*start)->getTrackNumber() - ::currentTrack :
                 ::currentTrack - (*start)->getTrackNumber();
             if(curr_dist<shortest_dist) start=i;
-            
         }
         
         IORequest* ioReq = *start;
@@ -152,6 +151,43 @@ public:
         return IOQueue.empty();
     }
 };
+
+class LOOK : public IOScheduler {
+public:
+    
+    void addRequest(IORequest* req){
+        IOQueue.push_back(req);
+    }
+    
+    IORequest* getStrategyVictim() {
+        list<IORequest*> hilist, lolist;
+        auto hi = IOQueue.end(), lo = IOQueue.end();
+        for (auto it = IOQueue.begin(); it != IOQueue.end(); it++) {
+            if ((*it)->getTrackNumber() >= currentTrack) {
+                if (hi == IOQueue.end() ||
+                    (*it)->getTrackNumber() < (*hi)->getTrackNumber()) {
+                    hi = it;
+                }
+                hilist.push_back((*it));
+            }
+            if ((*it)->getTrackNumber() <= ::currentTrack) {
+                if (lo == IOQueue.end() ||
+                    (*it)->getTrackNumber() > (*lo)->getTrackNumber()) {
+                    lo = it;
+                }
+                lolist.push_back((*it));
+            }
+        }
+        auto& next = direction==1? hi : lo;
+        bool change = next == IOQueue.end();
+        if (change) next = direction==1 ? lo : hi;
+        IORequest* r2= *next;
+        IOQueue.erase(next);
+        return r2;
+    }
+};
+
+
 std::map<int, std::string> mapper;
 double summary[3];
 
@@ -186,47 +222,42 @@ void printOutputs(){
     << (long)(summary[MAXWAITING]) << endl;
 }
 void simulation(){
-    
     auto next=createdRequests.begin();
     while(true){
-        
-        if(next!=createdRequests.end() && (*next)->getIssueTime()==::currentTime){
+        if(next!=createdRequests.end() && (*next)->getIssueTime()==currentTime){
             sch->addRequest(*next);
             next++;
         }
-        if(::CURRENT_RUNNING_IO!=nullptr){
-            if(::CURRENT_RUNNING_IO->getTrackNumber()==::currentTrack){
+        if(CURRENT_RUNNING_IO!=nullptr){
+            if(CURRENT_RUNNING_IO->getTrackNumber()==currentTrack){
                 CURRENT_RUNNING_IO->setEndTime(currentTime);
             mappingOutput(CURRENT_RUNNING_IO);
-            ::CURRENT_RUNNING_IO=nullptr;
+            CURRENT_RUNNING_IO=nullptr;
             continue; }
         else{
             currentTrack+=direction;
             movementTracker++;
         }
         }
-        else if(!::sch->empty()){
-                ::CURRENT_RUNNING_IO = sch->getStrategyVictim();
-            ::CURRENT_RUNNING_IO->setStartTime(currentTime);
-                if (currentTrack!= CURRENT_RUNNING_IO->getTrackNumber()) {
-                    if(currentTrack<CURRENT_RUNNING_IO->getTrackNumber()) direction=1;
-                    else direction=-1;
-                }
+        else if(!sch->empty()){
+            CURRENT_RUNNING_IO = sch->getStrategyVictim();
+            CURRENT_RUNNING_IO->setStartTime(currentTime);
+            if (currentTrack!= CURRENT_RUNNING_IO->getTrackNumber()) {
+                if(currentTrack<CURRENT_RUNNING_IO->getTrackNumber()) direction=1;
+                else direction=-1;
+            }
             continue;
-            }
+        }
         
-        if(!::CURRENT_RUNNING_IO && ::sch->empty() && next==createdRequests.end()){
-                break;
-            }
+        if(CURRENT_RUNNING_IO==nullptr && sch->empty() && next==createdRequests.end()){break;}
         currentTime++;
     }
     
 }
 int main(int argc, const char * argv[]) {
     // insert code here...
-    std::cout << "Hello, World!\n";
     string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input9";
-    sch=new SSTF();
+    sch=new LOOK();
 
     initialize(inputFile);
     simulation();
