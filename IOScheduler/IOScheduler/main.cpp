@@ -108,53 +108,46 @@ IOScheduler *sch;
 
 class FIFO:public IOScheduler{
 public:
-    void addRequest(IORequest* req){
-        IOQueue.push_back(req);
+    void addRequest(IORequest* io){
+        IOQueue.push_back(io);
     }
     
     IORequest* getStrategyVictim(){
-        IORequest* Req=IOQueue.front();
+        IORequest* io=IOQueue.front();
         IOQueue.pop_front();
-        return Req;
+        return io;
     }
 };
 
 
 class SSTF:public IOScheduler{
 public:
-    void addRequest(IORequest* req){
-        IOQueue.push_back(req);
+    void addRequest(IORequest* io){
+        IOQueue.push_back(io);
     }
 
 
     IORequest* getStrategyVictim(){
         auto start=IOQueue.begin();
+        long distance=0,minDistance=0;
+        
         for(auto i = IOQueue.begin();i!=IOQueue.end(); i++)
         {
-            unsigned long curr_dist =
-                (*i)->getTrackNumber() > ::currentTrack ?
-                (*i)->getTrackNumber() - ::currentTrack :
-                ::currentTrack - (*i)->getTrackNumber();
-            unsigned long shortest_dist =
-                (*start)->getTrackNumber() > ::currentTrack ?
-                (*start)->getTrackNumber() - ::currentTrack :
-                ::currentTrack - (*start)->getTrackNumber();
-            if(curr_dist<shortest_dist) start=i;
+            distance=abs((*i)->getTrackNumber()-currentTrack);
+            minDistance=abs((*start)->getTrackNumber()-currentTrack);
+            if(distance<minDistance) {
+                start=i;
+            }
         }
         
         IORequest* ioReq = *start;
         IOQueue.erase(start);
         return ioReq;
     }
-    
-    bool empty(){
-        return IOQueue.empty();
-    }
 };
 
 class LOOK : public IOScheduler {
 public:
-    
     void addRequest(IORequest* req){
         IOQueue.push_back(req);
     }
@@ -336,7 +329,7 @@ void simulation(){
 int main(int argc, const char * argv[]) {
     // insert code here...
     string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input9";
-    sch=new FLOOK();
+    sch=new SSTF();
 
     initialize(inputFile);
     simulation();
