@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <unistd.h>
 #include <queue>
+#include<getopt.h>
 
 
 using namespace std;
@@ -29,7 +30,7 @@ using namespace std;
 ifstream file;
 
 enum sums {TURNAROUND=0, WAITING=1, MAXWAITING=2};
-unsigned long movementTracker = 0;
+int movementTracker = 0;
 
 class IORequest{
     int id;
@@ -153,29 +154,37 @@ public:
     }
     
     IORequest* getStrategyVictim() {
-        list<IORequest*> hilist, lolist;
-        auto hi = IOQueue.end(), lo = IOQueue.end();
-        for (auto it = IOQueue.begin(); it != IOQueue.end(); it++) {
-            if ((*it)->getTrackNumber() >= currentTrack) {
-                if (hi == IOQueue.end() ||
-                    (*it)->getTrackNumber() < (*hi)->getTrackNumber()) {
-                    hi = it;
-                }
-                hilist.push_back((*it));
+        list<IORequest*> maxL, minL;
+        
+        auto i=IOQueue.begin(), max = IOQueue.end(), min = IOQueue.end();
+        while(i!=IOQueue.end()){
+            if((*i)->getTrackNumber()>=currentTrack){
+                maxL.push_back(*i);
             }
-            if ((*it)->getTrackNumber() <= ::currentTrack) {
-                if (lo == IOQueue.end() ||
-                    (*it)->getTrackNumber() > (*lo)->getTrackNumber()) {
-                    lo = it;
-                }
-                lolist.push_back((*it));
+            if((*i)->getTrackNumber()>=currentTrack && (max==IOQueue.end() ||
+                                                        (*i)->getTrackNumber()<(*max)->getTrackNumber())){
+                max=i;
             }
+            i++;
         }
-        auto& next = direction==1? hi : lo;
-        bool change = next == IOQueue.end();
-        if (change) next = direction==1 ? lo : hi;
-        IORequest* r2= *next;
-        IOQueue.erase(next);
+        
+        i=IOQueue.begin();
+        while(i!=IOQueue.end()){
+            if((*i)->getTrackNumber()<=currentTrack){
+                minL.push_back(*i);
+            }
+            if((*i)->getTrackNumber()<=currentTrack && (min==IOQueue.end() ||
+                                                        (*i)->getTrackNumber()>(*min)->getTrackNumber())){
+                min=i;
+            }
+            i++;
+        }
+        
+        auto& n=direction==1?max:min;
+        if(n==IOQueue.end() && direction==1) n= min;
+        else if(n==IOQueue.end()) n=max;
+        IORequest* r2= *n;
+        IOQueue.erase(n);
         return r2;
     }
 };
@@ -227,30 +236,37 @@ public:
             swap = !swap;
         }
         
-        list<IORequest*> hilist, lolist;
-        auto hi = IOQueue.end(), lo = IOQueue.end();
-        for (auto it = IOQueue.begin(); it != IOQueue.end(); it++) {
-            if ((*it)->getTrackNumber() >= currentTrack) {
-                if (hi == IOQueue.end() ||
-                    (*it)->getTrackNumber() < (*hi)->getTrackNumber()) {
-                    hi = it;
-                }
-                hilist.push_back((*it));
-            }
-            if ((*it)->getTrackNumber() <= ::currentTrack) {
-                if (lo == IOQueue.end() ||
-                    (*it)->getTrackNumber() > (*lo)->getTrackNumber()) {
-                    lo = it;
-                }
-                lolist.push_back((*it));
-            }
-        }
-        auto& next = direction==1? hi : lo;
-        bool change = next == IOQueue.end();
-        if (change) next = direction==1 ? lo : hi;
-        IORequest* r2= *next;
-        IOQueue.erase(next);
+        list<IORequest*> maxL, minL;
         
+        auto i=IOQueue.begin(), max = IOQueue.end(), min = IOQueue.end();
+        while(i!=IOQueue.end()){
+            if((*i)->getTrackNumber()>=currentTrack){
+                maxL.push_back(*i);
+            }
+            if((*i)->getTrackNumber()>=currentTrack && (max==IOQueue.end() ||
+                                                        (*i)->getTrackNumber()<(*max)->getTrackNumber())){
+                max=i;
+            }
+            i++;
+        }
+        
+        i=IOQueue.begin();
+        while(i!=IOQueue.end()){
+            if((*i)->getTrackNumber()<=currentTrack){
+                minL.push_back(*i);
+            }
+            if((*i)->getTrackNumber()<=currentTrack && (min==IOQueue.end() ||
+                                                        (*i)->getTrackNumber()>(*min)->getTrackNumber())){
+                min=i;
+            }
+            i++;
+        }
+        
+        auto& n=direction==1?max:min;
+        if(n==IOQueue.end() && direction==1) n= min;
+        else if(n==IOQueue.end()) n=max;
+        IORequest* r2= *n;
+        IOQueue.erase(n);
         return r2;
     }
     
@@ -259,19 +275,37 @@ public:
     }
 };
 
-std::map<int, std::string> mapper;
+
 double summary[3];
+
+class outputIO{
+public:
+    int id;
+    int issued;
+    int startTime;
+    int endTime;
+    outputIO(int a, int b, int c, int d){
+        id=a;
+        issued=b;
+        startTime=c;
+        endTime=d;
+    }
+};
+
+std::map<int, outputIO*> mapper;
 
 void mappingOutput(IORequest* proc){
     int id=proc->getId();
     int issueTime=CURRENT_RUNNING_IO->getIssueTime();
     int startTime =CURRENT_RUNNING_IO->getStartTime();
     int endTime =CURRENT_RUNNING_IO->getEndTime();
+    if(CURRENT_RUNNING_IO!=nullptr){
+        outputIO* o=new outputIO(CURRENT_RUNNING_IO->getId(), CURRENT_RUNNING_IO->getIssueTime(), CURRENT_RUNNING_IO->getStartTime(), CURRENT_RUNNING_IO->getEndTime());
+        mapper[id]=o;
+    }
     
-    string str = to_string(CURRENT_RUNNING_IO->getId())+":\t"+to_string(CURRENT_RUNNING_IO->getIssueTime())+"\t"+to_string(CURRENT_RUNNING_IO->getStartTime())+"\t"+to_string(CURRENT_RUNNING_IO->getEndTime());
-    
-    mapper[id]=str;
-    
+    //printf("%5d: %5d %5d %5d\n", iop, req->arr_time, r->start_time, r->end_time);
+   
     summary[TURNAROUND]+= endTime - issueTime;
     summary[WAITING]+= startTime - issueTime;
     if(summary[MAXWAITING] < startTime-issueTime)
@@ -282,16 +316,24 @@ int currentTime = 0;
 
 void printOutputs(){
     for(int i=0;i<createdRequests.size();i++){
-        cout<<mapper[i]<<endl;
+        outputIO* o= mapper[i];
+        printf("%5d: %5d %5d %5d\n", o->id, o->issued, o->startTime, o->endTime);
     }
     
     double avgTurnaround=summary[TURNAROUND]/createdRequests.size();
     double avgWaiting=summary[WAITING]/createdRequests.size();
     double avgBusy=(double)(movementTracker)/(double)(currentTime);
-    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<setprecision(4)<<avgBusy<<" "<<
-    fixed << setprecision(2) << avgTurnaround << " "
-    << fixed << setprecision(2) << avgWaiting << " "
-    << (long)(summary[MAXWAITING]) << endl;
+//    cout<<"SUM: "<<currentTime<<" "<<movementTracker<<" "<<setprecision(4)<<avgBusy<<" "<<
+//    fixed << setprecision(2) << avgTurnaround << " "
+//    << fixed << setprecision(2) << avgWaiting << " "
+//    << (long)(summary[MAXWAITING]) << endl;
+    printf("SUM: %d %d %.4lf %.2lf %.2lf %d\n",
+    currentTime, movementTracker, avgBusy,
+    avgTurnaround, avgWaiting, (int)(summary[MAXWAITING]));
+    
+//    printf("SUM: %d %d %.4lf %.2lf %.2lf %d\n",
+//    total_time, tot_movement, io_utilization,
+//    avg_turnaround, avg_waittime, max_waittime);
 }
 void simulation(){
     auto next=createdRequests.begin();
@@ -326,10 +368,31 @@ void simulation(){
     }
     
 }
-int main(int argc, const char * argv[]) {
+int main(int argc, char * argv[]) {
     // insert code here...
-    string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input9";
-    sch=new SSTF();
+    
+    int c;
+    while ((c= getopt(argc, argv, "s:"))!= -1) {
+        switch (c) {
+        case 's':
+            if (optarg[0] == 'N')
+                sch = new FIFO();
+             else if (optarg[0] == 'S')
+                sch = new SSTF();
+             else if (optarg[0] == 'L')
+                sch = new LOOK();
+            else if (optarg[0] == 'C')
+                sch = new CLOOK();
+            else if (optarg[0]=='F')
+                sch=new FLOOK();
+            break;
+        default: cout<<"Invalid Arguments!";
+        }
+    }
+    
+    string inputFile=argv[argc-1];
+    
+//    string inputFile="/Users/asmitamitra/Desktop/Spring2023/OS/Lab4/lab4_assign/input8";
 
     initialize(inputFile);
     simulation();
