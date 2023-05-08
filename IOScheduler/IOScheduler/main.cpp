@@ -197,24 +197,27 @@ public:
     }
     
     IORequest* getStrategyVictim() {
-        list<IORequest*> list;
-        auto next = IOQueue.end(), lo = IOQueue.begin();
-        for (auto it = IOQueue.begin(); it != IOQueue.end(); it++) {
-            if ((*it)->getTrackNumber() >= currentTrack) {
-                if (next == IOQueue.end() ||
-                    (*it)->getTrackNumber() < (*next)->getTrackNumber()) {
-                    next = it;
+        list<IORequest*> queue;
+        
+        auto i=IOQueue.begin(), n=IOQueue.end(), min=IOQueue.begin();
+        
+        while(i!=IOQueue.end()){
+            if ((*i)->getTrackNumber() >= currentTrack) {
+                if (n == IOQueue.end() ||
+                    (*i)->getTrackNumber()<(*n)->getTrackNumber()) {
+                    n=i;
                 }
-                list.push_back(*it);
+                queue.push_back(*i);
             }
-            if ((*it)->getTrackNumber() < (*lo)->getTrackNumber()) {
-                lo = it;
+            if ((*i)->getTrackNumber()<(*min)->getTrackNumber()) {
+                min=i;
             }
+            i++;
         }
-        bool change = next == IOQueue.end();
-        if (change) next = lo;
-        IORequest* r = *next;
-        IOQueue.erase(next);
+        
+        if(n==IOQueue.end()) n=min;
+        IORequest* r = *n;
+        IOQueue.erase(n);
         return r;
     }
 };
@@ -222,18 +225,21 @@ public:
 
 class FLOOK : public IOScheduler {
 private:
-    list<IORequest*> addq;
-    bool swap = false;
+    list<IORequest*> queue;
+    bool flag=false;
 public:
     
-    void addRequest(IORequest* r) {
-        (CURRENT_RUNNING_IO ? addq : IOQueue).push_back(r);
+    void addRequest(IORequest* req) {
+        if(CURRENT_RUNNING_IO!=nullptr) queue.push_back(req);
+        else IOQueue.push_back(req);
+        return;
     }
     
     IORequest* getStrategyVictim() {
         if (IOQueue.empty()) {
-            IOQueue.swap(addq);
-            swap = !swap;
+            IOQueue.swap(queue);
+            if(flag) flag=false;
+            else flag=true;
         }
         
         list<IORequest*> maxL, minL;
@@ -271,7 +277,7 @@ public:
     }
     
     bool empty() {
-        return addq.empty() && IOQueue.empty();
+        return queue.empty() && IOQueue.empty();
     }
 };
 
@@ -330,10 +336,6 @@ void printOutputs(){
     printf("SUM: %d %d %.4lf %.2lf %.2lf %d\n",
     currentTime, movementTracker, avgBusy,
     avgTurnaround, avgWaiting, (int)(summary[MAXWAITING]));
-    
-//    printf("SUM: %d %d %.4lf %.2lf %.2lf %d\n",
-//    total_time, tot_movement, io_utilization,
-//    avg_turnaround, avg_waittime, max_waittime);
 }
 void simulation(){
     auto next=createdRequests.begin();
@@ -369,7 +371,6 @@ void simulation(){
     
 }
 int main(int argc, char * argv[]) {
-    // insert code here...
     
     int c;
     while ((c= getopt(argc, argv, "s:"))!= -1) {
